@@ -1,14 +1,13 @@
 {
     "urls": [
-        "https://tasttt.shopiforge.com/product/29480-kamera-videosposterezhennya",
-        "https://tasttt.shopiforge.com/product/29480-nalobniy-likhtar"
+        "https://new.busk.website/hot/"
     ],
     "dev_token": "8037890434:AAFtrh8MIghH_xKDNn-4bbZ3g8y9kVe_PQ8",
     "client_token": "7220374165:AAH0h0lgI7Wc7PRYKJlHpvcrVcrJRKaJLZg",
     "telegram_bot_token": "7220374165:AAH0h0lgI7Wc7PRYKJlHpvcrVcrJRKaJLZg",
     "request_count": 13,
-    "min_requests": 25,
-    "max_requests": 100,
+    "min_requests": 1,
+    "max_requests": 25,
     "min_quantity": 1,
     "max_quantity": 3
 }
