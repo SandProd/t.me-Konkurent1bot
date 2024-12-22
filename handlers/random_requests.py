@@ -24,8 +24,21 @@ logging.basicConfig(
 )
 
 
-async def process_url(url, url_number, requests_count, update, context):
-    """Asynchronously executes requests for a given URL."""
+async def generate_schedule(request_count):
+    """Генерирует расписание запросов на основе текущего времени."""
+    now = datetime.now()
+    intervals = [random.randint(0, 24 * 3600 - 1) for _ in range(request_count)]
+    intervals.sort()  # Сортируем время в порядке возрастания
+
+    schedule = [
+        (now + timedelta(seconds=interval)).strftime('%H:%M:%S')
+        for interval in intervals
+    ]
+    return schedule
+
+
+async def process_url(url, url_number, requests_count, schedule, update, context):
+    """Asynchronously executes requests for a given URL based on its schedule."""
     global stop_random_requests_flag
 
     headers = {
@@ -33,13 +46,27 @@ async def process_url(url, url_number, requests_count, update, context):
         "User-Agent": "Mozilla/5.0",
     }
 
-    for i in range(requests_count):
+    for i, scheduled_time in enumerate(schedule):
         if not stop_random_requests_flag:
             logging.info(f"{Fore.RED}Stopped requests for URL #{url_number} ({url}).{Style.RESET_ALL}")
             return
 
+        # Рассчитываем задержку до запланированного времени
+        now = datetime.now()
+        next_request_time = datetime.strptime(scheduled_time, "%H:%M:%S")
+
+        # Если расписание уже в прошлом, переносим его на следующий день
+        if next_request_time.time() < now.time():
+            next_request_time = datetime.combine(now.date() + timedelta(days=1), next_request_time.time())
+        else:
+            next_request_time = datetime.combine(now.date(), next_request_time.time())
+
+        delay = (next_request_time - now).total_seconds()
+        logging.info(f"Delaying next request for URL #{url_number} by {delay:.2f} seconds.")
+        await asyncio.sleep(delay)
+
         try:
-            # Prepare the request data
+            # Генерация данных для запроса
             name = generate_name_from_db()
             phone = generate_phone_from_db()
             data = {
@@ -48,6 +75,7 @@ async def process_url(url, url_number, requests_count, update, context):
                 "comment": "nospam"
             }
 
+            # Выполнение запроса
             logging.info(f"{Fore.CYAN}Sending POST request for URL #{url_number} ({url}).{Style.RESET_ALL}")
             response = requests.post(url, headers=headers, data=data, timeout=10)
             response.raise_for_status()
@@ -56,7 +84,7 @@ async def process_url(url, url_number, requests_count, update, context):
 
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=f"Request #{i + 1} for URL #{url_number} ({url}) successful."
+                text=f"Request #{i + 1} for URL #{url_number} ({url}) successful. Scheduled for: {scheduled_time}"
             )
 
         except requests.exceptions.RequestException as e:
@@ -66,15 +94,9 @@ async def process_url(url, url_number, requests_count, update, context):
             )
             logging.error(f"{Fore.RED}Request failed for URL #{url_number}: {e}{Style.RESET_ALL}")
 
-        # Add delay between requests
-        delay = random.randint(5, 15)
-        next_request_time = datetime.now() + timedelta(seconds=delay)
-        logging.info(f"Next request for URL #{url_number} scheduled at {next_request_time.strftime('%H:%M:%S')}.")
-        await asyncio.sleep(delay)
-
 
 async def run_random_requests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Starts running random requests."""
+    """Запускает выполнение запросов с расписанием."""
     global stop_random_requests_flag, tasks
     stop_random_requests_flag = True  # Allow requests to execute
     tasks = []
@@ -91,18 +113,25 @@ async def run_random_requests(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    # Create and start background tasks
+    # Создаем задачи с расписанием
     for i, url in enumerate(urls, start=1):
         request_count = random.randint(min_requests, max_requests)
-        task = asyncio.create_task(process_url(url, i, request_count, update, context))
+        schedule = await generate_schedule(request_count)
+        task = asyncio.create_task(process_url(url, i, request_count, schedule, update, context))
         tasks.append(task)
+
+        # Отправляем пользователю расписание
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"Schedule for URL #{i} ({url}):\n" + "\n".join(schedule)
+        )
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text="Random requests started in background.")
     logging.info("Random requests started in background.")
 
 
 async def stop_random_requests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Stops all running requests."""
+    """Останавливает выполнение запросов."""
     global stop_random_requests_flag, tasks
     stop_random_requests_flag = False  # Signal to stop tasks
 
